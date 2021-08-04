@@ -137,6 +137,18 @@ def _FCGI_NameValuePair_Nice__pack(fcgi_nvpair_nice):
 
 def _FCGI_NameValuePair_Nice__unpack(data, return_parsed_bytes=False,
                                            accept_leftovers=False):
+    '''
+    Interprets a byte array as a FCGI_NameValuePair_Nice namedtuple.
+    If accept_leftovers=True is passed, it will silently parse only the
+    needed prefix of `data`. Otherwise, will raise an struct.error if
+    the `data` array is not of the expected length.
+
+    If return_parsed_bytes=True is passed, it will return a tuple of both
+    the FCGI_NameValuePair_Nice namedtuple, and the number of bytes it
+    took to parse `data`. It's useful to use it with accept_leftovers=True
+    when parsing an array of multiple data (for instance, the contentData
+    of a FCGI_PARAMS record).
+    '''
     nvpair_prefix = FCGI_NameValuePair_Prefix.unpack(data)
     offset = 2 # Byte index where ~Data parts begins in `data`
     name_len, value_len = None, None
