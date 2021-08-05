@@ -4,6 +4,15 @@ import struct
 '''
 FastCGI specification structs.
 
+DO NOT USE THESE FUNCTIONS unless you know what you're doing. Prefer the
+functions at fcgi_parsing.
+
+These functions handle raw data and map it directly into either ints or byte
+strings. A cointainer class (for instance FCGI_Record_Nice) will not be
+unpacked into having a FCGI_NameValuePair_Nice list in its contentData even
+if its payload can be parsed like so. That job is done by the fcgi_parsing
+functions.
+
 A variable length struct VARLENSTRUCT has:
     - a namedtuple assigned to its fixed length prefix, called
         VARLENSTRUCT_Prefix or similar,
@@ -14,7 +23,7 @@ Each VARLENSTRUCT_Nice named tuple has:
     - a packing function at VARLENSTRUCT_Nice.pack
     - an unpacking function at VARLENSTRUCT_Nice.unpack
 
-VARLENSTRUCT: FCGI_Record, FCGI_NameValuePairXX
+VARLENSTRUCT: FCGI_Record, FCGI_NameValuePair
 '''
 
 # Records
@@ -40,13 +49,37 @@ def _FCGI_Record_Nice__pack(fcgi_record_nice):
     return struct.pack(f'>BBHHBB{content_len}s{padding_len}s',
                        *fcgi_record_nice)
 
-def _FCGI_Record_Nice__unpack(data):
+def _FCGI_Record_Nice__unpack(data, return_parsed_bytes=False,
+                                    accept_leftovers=False):
+    '''
+    Interprets a byte array as a FCGI_Record_Nice namedtuple.
+    If accept_leftovers=True is passed, it will silently parse only the
+    needed prefix of `data`. Otherwise, will raise an struct.error if
+    the `data` array is not of the expected length.
+
+    If return_parsed_bytes=True is passed, it will return a tuple of both
+    the FCGI_Record_Nice namedtuple, and the number of bytes it
+    took to parse `data`. It's useful to use it with accept_leftovers=True
+    when parsing a stream of multiple records.
+    '''
     record_prefix = FCGI_Record_Prefix.unpack(data)
     content_len = (record_prefix.contentLengthB1 << 8) + \
                     record_prefix.contentLengthB0
     padding_len = record_prefix.paddingLength
-    return FCGI_Record_Nice._make(struct.unpack(f'>BBHHBB{content_len}s{padding_len}s',
-                                                 data))
+
+    parsed_bytes = content_len+padding_len+8
+    nice_record = None
+    if accept_leftovers and len(data) > parsed_bytes:
+        nice_record = FCGI_Record_Nice._make(struct.unpack(f'>BBHHBB{content_len}s{padding_len}s',
+                                             data[:parsed_bytes]))
+    else:
+        nice_record = FCGI_Record_Nice._make(struct.unpack(f'>BBHHBB{content_len}s{padding_len}s',
+                                             data))
+    if return_parsed_bytes:
+        return nice_record, parsed_bytes
+    return nice_record
+
+
 
 FCGI_Record_Nice.pack = _FCGI_Record_Nice__pack
 FCGI_Record_Nice.unpack = _FCGI_Record_Nice__unpack
@@ -64,6 +97,8 @@ FCGI_NameValuePair_Prefix = namedtuple('FCGI_NameValuePair_Prefix',
 FCGI_NameValuePair_Prefix.unpack = lambda data: \
                                     FCGI_NameValuePair_Prefix._make(struct.unpack('BB', data[:2]))
 
+# Seems like we don't use FCGI_NameValuePairMN anywhere. But I'll leave them
+# here for the sake of completeness.
 FCGI_NameValuePair11 = namedtuple('FCGI_NameValuePair11', 'nameLengthB0 '\
                                                           'valueLengthB0 '\
                                                           'nameData '\
